@@ -10,16 +10,43 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-      - uses: dtolnay/rust-toolchain@stable
-      - run: sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-      - run: rustup target add aarch64-unknown-linux-gnu
-      - run: npm install
-      - run: npm run tauri build -- --target aarch64-unknown-linux-gnu
-      - uses: actions/upload-artifact@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Add ARM64 target
+        run: rustup target add aarch64-unknown-linux-gnu
+
+      - name: Install Tauri Linux Dependencies (Host only)
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Frontend Dependencies
+        run: npm install
+
+      - name: Build Tauri App for ARM64
+        run: npm run tauri build -- --target aarch64-unknown-linux-gnu
+        env:
+          # 🔥 关键变量：强制 Tauri 使用 cross 编译 Rust 部分
+          TAURI_BUILD_RUSTC: cross
+          # 允许 pkg-config 在交叉编译时继续查找（与 cross 配合使用）
+          PKG_CONFIG_ALLOW_CROSS: 1
+          # 增加 Node 内存，防止前端构建 OOM
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-bundle
           path: src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/
